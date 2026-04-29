@@ -26,21 +26,23 @@ pipeline {
             }
         }
 
-        stage('Start MySQL for tests') {
-            steps {
-                sh '''
-                    docker rm -f ${TEST_MYSQL_CONTAINER} || true
-                    docker run -d \
-                        --name ${TEST_MYSQL_CONTAINER} \
-                        -e MYSQL_ROOT_PASSWORD=root \
-                        -e MYSQL_DATABASE=incident_db \
-                        -p 3307:3306 \
-                        mysql:8.4.8
+stage('Start MySQL for tests') {
+    steps {
+        sh '''
+            docker rm -f ${TEST_MYSQL_CONTAINER} || true
+            docker network create ${NETWORK_NAME} || true
 
-                    sleep 25
-                '''
-            }
-        }
+            docker run -d \
+                --name ${TEST_MYSQL_CONTAINER} \
+                --network ${NETWORK_NAME} \
+                -e MYSQL_ROOT_PASSWORD=root \
+                -e MYSQL_DATABASE=incident_db \
+                mysql:8.4.8
+
+            sleep 25
+        '''
+    }
+}
 
         stage('Install dependencies') {
             steps {
@@ -48,11 +50,18 @@ pipeline {
             }
         }
 
-        stage('Run tests') {
-            steps {
-                sh 'npm test | tee reports/tests/api-tests.log'
-            }
-        }
+stage('Run tests') {
+    steps {
+        sh '''
+            DB_HOST=${TEST_MYSQL_CONTAINER} \
+            DB_PORT=3306 \
+            DB_USER=root \
+            DB_PASSWORD=root \
+            DB_NAME=incident_db \
+            npm test | tee reports/tests/api-tests.log
+        '''
+    }
+}
 
         stage('SonarQube analysis') {
             steps {
