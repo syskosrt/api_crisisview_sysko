@@ -53,8 +53,8 @@
         stage('Docker build') {
             steps {
                 sh '''
-                    docker build -t \:\ .
-                    docker save \:\ -o \.tar
+                    docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .
+                    docker save ${IMAGE_NAME}:${BUILD_NUMBER} -o ${IMAGE_NAME}.tar
                 '''
             }
         }
@@ -62,32 +62,32 @@
         stage('Deploy API on VM Back') {
             steps {
                 sh '''
-                    scp -i \ -o StrictHostKeyChecking=no \.tar \:/tmp/
+                    scp -i ${SSH_KEY} -o StrictHostKeyChecking=no ${IMAGE_NAME}.tar ${VM_BACK}:/tmp/
 
-                    ssh -i \ -o StrictHostKeyChecking=no \ "
-                        docker load -i /tmp/\.tar &&
-                        docker network create \ || true &&
+                    ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${VM_BACK} "
+                        docker load -i /tmp/${IMAGE_NAME}.tar &&
+                        docker network create ${NETWORK_NAME} || true
 
-                        docker inspect \ >/dev/null 2>&1 || docker run -d \\
-                            --name \ \\
-                            --network \ \\
-                            -e MYSQL_ROOT_PASSWORD=root \\
-                            -e MYSQL_DATABASE=incident_db \\
-                            -p 3307:3306 \\
-                            mysql:8.4.8 &&
+                        docker inspect ${MYSQL_CONTAINER} >/dev/null 2>&1 || docker run -d \
+                            --name ${MYSQL_CONTAINER} \
+                            --network ${NETWORK_NAME} \
+                            -e MYSQL_ROOT_PASSWORD=root \
+                            -e MYSQL_DATABASE=incident_db \
+                            -p 3307:3306 \
+                            mysql:8.4.8
 
-                        docker rm -f \ || true &&
+                        docker rm -f ${CONTAINER_NAME} || true
 
-                        docker run -d \\
-                            --name \ \\
-                            --network \ \\
-                            -p \:\ \\
-                            -e DB_HOST=\ \\
-                            -e DB_PORT=3306 \\
-                            -e DB_USER=root \\
-                            -e DB_PASSWORD=root \\
-                            -e DB_NAME=incident_db \\
-                            \:\
+                        docker run -d \
+                            --name ${CONTAINER_NAME} \
+                            --network ${NETWORK_NAME} \
+                            -p ${API_PORT}:${API_PORT} \
+                            -e DB_HOST=${MYSQL_CONTAINER} \
+                            -e DB_PORT=3306 \
+                            -e DB_USER=root \
+                            -e DB_PASSWORD=root \
+                            -e DB_NAME=incident_db \
+                            ${IMAGE_NAME}:${BUILD_NUMBER}
                     "
                 '''
             }
