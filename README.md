@@ -25,6 +25,11 @@ node migration.js
 node seed.js
 ```
 
+4. (Optional) Run tests:
+```bash
+npm test
+```
+
 ## Run Server
 
 ```bash
