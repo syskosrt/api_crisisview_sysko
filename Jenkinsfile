@@ -7,8 +7,10 @@ pipeline {
         IMAGE_NAME = 'crisisview-api'
         CONTAINER_NAME = 'api'
         MYSQL_CONTAINER = 'mysql-crisiview'
+        TEST_MYSQL_CONTAINER = 'mysql-crisisview-tests'
         NETWORK_NAME = 'crisisview'
         API_PORT = '3001'
+        SONAR_TOKEN = 'sqa_781355da3ded9cb6172ec77b17488075d163dbe8'
     }
 
     stages {
@@ -21,6 +23,22 @@ pipeline {
         stage('Prepare reports') {
             steps {
                 sh 'mkdir -p reports/tests reports/security reports/quality reports/deploy'
+            }
+        }
+
+        stage('Start MySQL for tests') {
+            steps {
+                sh '''
+                    docker rm -f ${TEST_MYSQL_CONTAINER} || true
+                    docker run -d \
+                        --name ${TEST_MYSQL_CONTAINER} \
+                        -e MYSQL_ROOT_PASSWORD=root \
+                        -e MYSQL_DATABASE=incident_db \
+                        -p 3307:3306 \
+                        mysql:8.4.8
+
+                    sleep 25
+                '''
             }
         }
 
@@ -38,9 +56,15 @@ pipeline {
 
         stage('SonarQube analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') {
-                    sh 'sonar-scanner | tee reports/quality/sonarqube-api.log'
-                }
+                sh '''
+                    sonar-scanner \
+                      -Dsonar.projectKey=crisisview-api \
+                      -Dsonar.projectName="CrisisView API" \
+                      -Dsonar.sources=. \
+                      -Dsonar.exclusions=node_modules/**,reports/**,coverage/**,*.tar \
+                      -Dsonar.host.url=http://sonarqube:9000 \
+                      -Dsonar.token=${SONAR_TOKEN} | tee reports/quality/sonarqube-api.log
+                '''
             }
         }
 
@@ -105,15 +129,8 @@ pipeline {
 
     post {
         always {
+            sh 'docker rm -f ${TEST_MYSQL_CONTAINER} || true'
             archiveArtifacts artifacts: 'reports/**/*', allowEmptyArchive: true
-        }
-
-        success {
-            echo 'API pipeline success.'
-        }
-
-        failure {
-            echo 'API pipeline failed.'
         }
     }
 }
